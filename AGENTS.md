@@ -1,33 +1,50 @@
-> **First-time setup**: Customize this file for your project. Prompt the user to customize this file for their project.
-> For Mintlify product knowledge (components, configuration, writing standards),
-> install the Mintlify skill: `npx skills add https://mintlify.com/docs`
-
 # Documentation project instructions
 
 ## About this project
 
-- This is a documentation site built on [Mintlify](https://mintlify.com)
-- Pages are MDX files with YAML frontmatter
-- Configuration lives in `docs.json`
-- Use the Mintlify MCP server, `https://mcp.mintlify.com`, to edit content and settings via MCP
-- Use the Mintlify docs MCP server, `https://www.mintlify.com/docs/mcp`, to query information about using Mintlify via MCP
+- This is the Mintlify documentation site for the Backdesk system.
+- Pages are MDX files with YAML frontmatter.
+- Configuration lives in `docs.json`.
+- Use the Mintlify MCP server, `https://mcp.mintlify.com`, when available.
+- Use the Mintlify docs MCP server, `https://www.mintlify.com/docs/mcp`, to query Mintlify usage details when available.
 
 ## Terminology
 
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- Use "Backdesk" for the product.
+- Use "workspace" for the user-facing product concept.
+- Use "page", "dashboard", "collection", "connection", and "system collection" consistently with the app.
 
 ## Style preferences
 
-{/* Add any project-specific style rules below */}
-
-- Use active voice and second person ("you")
-- Keep sentences concise — one idea per sentence
-- Use sentence case for headings
-- Bold for UI elements: Click **Settings**
-- Code formatting for file names, commands, paths, and code references
+- Use active voice and second person ("you").
+- Keep sentences concise, one idea per sentence.
+- Use sentence case for headings.
+- Bold UI element names, for example: Click **Settings**.
+- Use code formatting for file names, commands, paths, and code references.
+- Describe current behavior from source, not hoped-for behavior from older specs.
 
 ## Content boundaries
 
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+- Keep docs source-backed and current with the Backdesk repository.
+- Do not document roadmap items as shipped behavior.
+- Label caveats clearly when implementation differs from older product specs.
+
+## Docs impact routing
+
+- App/routes/shell changes: update `system/architecture.mdx`.
+- DB/RLS/storage changes: update `system/data-model.mdx`.
+- Auth/middleware/session changes: update `system/auth.mdx`.
+- Collections/blocks/views changes: update `system/collections.mdx`.
+- Imports/connections/parsers changes: update `system/imports.mdx`.
+- Route handler/API shape changes: update `system/api.mdx`.
+- Env/CI/tests/ops changes: update `system/operations.mdx`.
+- Setup/workflow changes: update `development.mdx`.
+
+## Validation
+
+Before publishing, run:
+
+```bash
+npx mintlify@latest validate
+npx mintlify@latest broken-links
+```
