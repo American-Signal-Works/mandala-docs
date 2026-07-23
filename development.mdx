@@ -108,11 +108,11 @@ npx mintlify@latest broken-links
 npx mintlify@latest dev
 ```
 
-Update documentation in the same change when commands, environment variables, route contracts, lifecycle states, or safety boundaries change.
+Update documentation in the same change when commands, environment variables, APIs, route contracts, lifecycle states, user workflows, safety boundaries, or operating procedures change. Orchestrator reviews the complete Mintlify diff and preview, runs `npx mintlify@latest validate` plus `npx mintlify@latest broken-links`, deploys through the configured production workflow, and verifies the live page. A staged branch, preview, or open documentation PR is not completion. Internal changes with no reader-visible documentation impact do not require a docs edit or deployment.
 
 ## Codex and design workflow
 
-Repository instructions live in `AGENTS.md` and `CLAUDE.md`. Figma-to-implementation and release-ready feature work uses the repo-owned Orchestrator skill.
+Repository instructions live in `AGENTS.md` and `CLAUDE.md`. Design-to-implementation, bugfix, and release-ready work uses the repo-owned Orchestrator skill.
 
 Review artifacts belong under:
 
@@ -120,4 +120,6 @@ Review artifacts belong under:
 docs/codex/runs/<yyyy-mm-dd-feature-slug>/
 ```
 
-The design contract is an approval gate. Before merge or release, remove temporary contracts, plans, QA notes, and fix lists unless they are intentionally durable documentation.
+The design or bugfix contract is an approval gate. Before merge or release, remove temporary contracts, plans, QA notes, and fix lists unless they are intentionally durable documentation.
+
+For production-facing fixes and releases, Orchestrator records `Code`, `Deployment`, `Database`, `Real Data`, and `External Provider` independently. A passing test suite or deployment does not prove the real-data journey or provider health; every applicable layer must pass or be explicitly deferred.
