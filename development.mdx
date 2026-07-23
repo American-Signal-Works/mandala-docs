@@ -108,7 +108,7 @@ npx mintlify@latest broken-links
 npx mintlify@latest dev
 ```
 
-Update documentation in the same change when commands, environment variables, APIs, route contracts, lifecycle states, user workflows, safety boundaries, or operating procedures change. Internal changes with no reader-visible documentation impact do not require a docs edit. Run both `npx mintlify@latest validate` and `npx mintlify@latest broken-links` before release.
+Update documentation in the same change when commands, environment variables, APIs, route contracts, lifecycle states, user workflows, safety boundaries, or operating procedures change. Orchestrator reviews the complete Mintlify diff and preview, runs `npx mintlify@latest validate` plus `npx mintlify@latest broken-links`, deploys through the configured production workflow, and verifies the live page. A staged branch, preview, or open documentation PR is not completion. Internal changes with no reader-visible documentation impact do not require a docs edit or deployment.
 
 ## Codex and design workflow
 
