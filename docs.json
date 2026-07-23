@@ -4,9 +4,9 @@
   "name": "Mandala Docs",
   "description": "Product and engineering documentation for Mandala's permissioned agents, connected data, Sandbox, approvals, and controlled execution.",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1D4ED8",
+    "light": "#60A5FA",
+    "dark": "#2563EB"
   },
   "navigation": {
     "groups": [
@@ -57,5 +57,15 @@
         "label": "GitHub"
       }
     ]
+  },
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "background": {
+    "color": {
+      "light": "#EAEBEC",
+      "dark": "#151617"
+    }
   }
 }
