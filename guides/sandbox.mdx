@@ -1,0 +1,97 @@
+---
+title: "Sandbox"
+sidebarTitle: "Sandbox"
+description: "Test agents against real workspace data without committing business side effects."
+icon: "flask-conical"
+keywords: ["Sandbox", "real data", "mock execution", "write firewall"]
+---
+
+Sandbox runs the real agent, compiler, policies, connectors, and review flow against workspace data while keeping business side effects temporary or simulated.
+
+It is a safety mode, not a separate toy agent and not a synonym for fixture data.
+
+## What Sandbox preserves
+
+A Sandbox run uses the same important inputs as a normal run:
+
+- the selected workspace and acting user;
+- the installed agent version and compiled capability bindings;
+- real cataloged connector data when using the real-data path;
+- the normal deterministic rules and evidence requirements;
+- the review, approval, and audit model; and
+- Context Engine retrieval when it is enabled and eligible.
+
+This makes Sandbox useful for proving that mappings, freshness checks, duplicate detection, and evidence coverage work before activation.
+
+## What Sandbox blocks
+
+Sandbox prevents real business writes from escaping the safety boundary. The included state-changing executor produces mock outcomes only; it does not send a purchase order to a vendor or ERP.
+
+Temporary session state is separated from durable business state, and every action still has to pass capability, policy, role, warning, and approval checks.
+
+<Warning>
+  Sandbox does not make stale or incomplete data safe. Freshness, source coverage, schema compatibility, and required-field failures still block the run.
+</Warning>
+
+## Open a real-data Sandbox session
+
+In the interactive terminal, use:
+
+```text
+/sandbox
+```
+
+The scripted equivalent is:
+
+```bash
+mandala sandbox open --limit 25
+```
+
+This opens a temporary session over a bounded set of cataloged workspace data.
+
+## Test a skill file
+
+```bash
+mandala sandbox run \
+  --skill skills/procurement-reorder/SKILL.md \
+  --confirm-mappings
+```
+
+`--confirm-mappings` is required because Mandala creates declarative mappings between the skill's capability contract and the workspace data catalog. Review those mappings before accepting them.
+
+Installed agents can also be tested from `/agents` with the `Test in Sandbox` action.
+
+## Fixtures versus real data
+
+Mandala supports both paths and labels them separately:
+
+| Path | Use |
+| --- | --- |
+| Synthetic fixture | Repeatable development and regression scenarios using Mandala Bean Co. data |
+| Real-data Sandbox | Read current workspace records through the real catalog and connector bindings while blocking external writes |
+
+List and run synthetic scenarios with:
+
+```text
+/fixtures
+/run-fixture <row-or-id>
+```
+
+Scripted equivalents are `mandala workflow fixture list` and `mandala workflow fixture run <scenario-id>`.
+
+## Workspace setting
+
+Check the current setting with:
+
+```bash
+mandala sandbox status
+```
+
+Owners and admins can change it with a reason and configuration version. Turning Sandbox off requires explicit confirmation because it weakens the workspace safety posture:
+
+```bash
+mandala sandbox set off \
+  --expected-version <n> \
+  --reason "Approved production transition" \
+  --confirm
+```

@@ -1,0 +1,106 @@
+---
+title: "CLI reference"
+sidebarTitle: "CLI"
+description: "Interactive and scripted commands for authentication, agents, Sandbox, and approval work."
+icon: "terminal"
+keywords: ["CLI", "terminal", "commands", "slash commands"]
+---
+
+Run `mandala` with no arguments for the guided terminal. Type `/` to open the command palette. Commands appear only when they are valid for the current selection and work-item state.
+
+Use `mandala <command>` for scripts and automation. Add `--json` to receive a stable JSON envelope.
+
+## Authentication and workspace
+
+| Command | Purpose |
+| --- | --- |
+| `mandala auth login` | Hosted browser sign-in and workspace authorization |
+| `mandala auth login --local --email <address>` | Local engineering magic-link sign-in |
+| `mandala auth status` | Inspect the saved session |
+| `mandala auth logout` | Revoke the hosted session and clear local context |
+| `mandala company list` | List authorized workspaces |
+| `mandala company use <company-id>` | Select a workspace |
+| `mandala company current` | Show the selected workspace |
+| `mandala status` | Probe the current environment and safety services |
+
+Interactive equivalents include `/login`, `/auth-status`, `/logout`, and `/workspace`.
+
+## Agents
+
+Use `/agents` for the guided manager. Its focused commands are:
+
+| Command | Purpose |
+| --- | --- |
+| `/agent-list` | List installed agents |
+| `/agent-show <row-or-id>` | Show one agent and its lifecycle state |
+| `/agent-validate <skill-file>` | Validate a `SKILL.md` without installing it |
+| `/agent-install <skill-file>` | Validate and install an inactive agent |
+| `/agent-test <row-or-id>` | Run the agent safely in Sandbox |
+| `/agent-activate <row-or-id>` | Allow the agent to start new work |
+| `/agent-deactivate <row-or-id>` | Stop new work without removing the agent |
+| `/agent-pause <row-or-id>` | Pause new work |
+| `/agent-resume <row-or-id>` | Recheck readiness and resume |
+| `/agent-disable <row-or-id>` | Disable until a deliberate later change |
+| `/agent-versions <row-or-id>` | List installed versions |
+| `/agent-rollback <row-or-id> <version>` | Restore an earlier version |
+
+To run an active agent against real cataloged workspace data:
+
+```bash
+mandala agents run <agent-id> --reason <text> --confirm
+```
+
+## Sandbox and fixtures
+
+| Command | Purpose |
+| --- | --- |
+| `/sandbox` | Open a temporary session on real workspace data |
+| `/fixtures` | List synthetic scenarios |
+| `/run-fixture <row-or-id>` | Run one synthetic scenario |
+| `mandala sandbox status` | Show the workspace Sandbox setting |
+| `mandala sandbox open [--limit <1-100>]` | Open a bounded real-data session |
+| `mandala sandbox run --skill <SKILL.md> --confirm-mappings` | Test a skill against cataloged data |
+| `mandala workflow fixture list` | List fixture ids for scripts |
+| `mandala workflow fixture run <scenario-id>` | Run a fixture from a script |
+
+## Inbox and review
+
+| Command | Purpose |
+| --- | --- |
+| `/inbox` | Show actionable work |
+| `/open <row-or-id>` | Select a work item |
+| `/refresh` | Refresh the selection or Inbox |
+| `/recommendation` | Show the recommendation |
+| `/evidence` | Show supporting evidence |
+| `/draft` | Show the proposed action payload |
+| `/history` | Show item activity |
+| `/detail` | Show the complete item |
+| `/approve [--ack-warnings]` | Approve the current draft |
+| `/edit --set <pointer=value> --reason <reason>` | Edit an allowed field and approve |
+| `/reject --reason <reason>` | Reject the item |
+| `/rework --reason <reason>` | Request another agent pass |
+| `/resolve` | Close without execution |
+| `/execute` | Execute an approved mock draft |
+
+Scripted equivalents use `mandala work list|inspect|show|ask|approve|edit|reject|resolve|rework|decide|execute`.
+
+Mutating workflow commands require terminal confirmation. Approval or edit can also use `--execute` to consume the returned execution capability immediately, but the decision and execution remain separately audited.
+
+## Context and settings
+
+| Command | Purpose |
+| --- | --- |
+| `/settings` | Manage Context and Sandbox settings interactively |
+| `/context` | Show verified terminal, user, workspace, and selection context |
+| `mandala context status` | Show provider readiness and indexing state |
+| `mandala context set off ...` | Disable external retrieval |
+| `mandala context set supermemory ... --confirm` | Select Supermemory with explicit confirmation |
+| \`mandala sandbox set on | off ...\` | Change the workspace Sandbox safety setting |
+
+Settings changes require the current configuration version and a reason. A stale version fails rather than overwriting someone else's newer change.
+
+## Conversation
+
+`mandala chat [bounded phrase]` and direct text in the interactive client route read-only questions through the contextual chat boundary. `mandala parse <bounded phrase>` shows how a bounded request resolves.
+
+Questions can explain work and workspace data. State changes still use the typed commands above and their confirmation checks.

@@ -1,34 +1,71 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Product docs",
-  "description": "Engineering documentation for the current system.",
+  "name": "Mandala Docs",
+  "description": "Product and engineering documentation for Mandala's permissioned agents, connected data, Sandbox, approvals, and controlled execution.",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1D4ED8",
+    "light": "#60A5FA",
+    "dark": "#2563EB"
   },
   "navigation": {
     "groups": [
       {
-        "group": "Start",
+        "group": "Get started",
         "pages": [
           "index",
-          "development"
+          "quickstart"
+        ],
+        "icon": "rocket"
+      },
+      {
+        "group": "Use Mandala",
+        "icon": "circle-check",
+        "pages": [
+          "guides/agents",
+          "guides/sandbox",
+          "guides/inbox-and-approvals",
+          "system/collections",
+          "system/imports"
         ]
       },
       {
-        "group": "System",
+        "group": "Platform",
         "pages": [
           "system/architecture",
           "system/data-model",
-          "system/auth",
-          "system/collections",
-          "system/imports",
+          "system/auth"
+        ],
+        "icon": "layers"
+      },
+      {
+        "group": "Reference",
+        "icon": "book-open",
+        "pages": [
+          "reference/cli",
           "system/api",
-          "system/operations"
+          "system/operations",
+          "development"
         ]
       }
     ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "href": "https://github.com/American-Signal-Works/mandala",
+        "label": "GitHub"
+      }
+    ]
+  },
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "background": {
+    "color": {
+      "light": "#EAEBEC",
+      "dark": "#151617"
+    }
   }
 }

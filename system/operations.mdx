@@ -1,78 +1,105 @@
 ---
-title: "Operations"
-description: "Runtime configuration, observability, tests, and known operational notes."
+title: "Operations and release checks"
+description: "Environment, workers, checkpoints, connector readiness, observability, and release verification."
+sidebarTitle: "Operations"
+icon: "gauge-high"
+keywords: ["operations", "environment variables", "workers", "release verification"]
 ---
 
-## Environment variables
+Mandala's operational boundary spans the Next.js deployment, Supabase, durable workflow checkpoints, connector providers, Context Engine, email delivery, observability, and scheduled workers.
 
-The Turborepo config treats these as global environment variables:
+## Configuration groups
+
+Use `.env.example` as the source list. Important groups are:
+
+| Group | Examples |
+| --- | --- |
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Public origin | `NEXT_PUBLIC_SITE_URL` |
+| Email and invitations | `RESEND_API_KEY`, `SEND_EMAIL_HOOK_SECRET`, invitation and payload secrets |
+| Workers | connector sync, Context Engine, account deletion, delivery, and cron secrets |
+| Connectors | ShipHero and Trello server-only credentials |
+| Context Engine | `CONTEXT_RETRIEVAL_ENABLED`, `SUPERMEMORY_API_KEY` |
+| Model and parser | AI Gateway, parser enablement, model selection, binding and input-hash secrets |
+| Workflow runtime | `MANDALA_WORKFLOW_DATABASE_URL` |
+| Tracing | LangSmith and Sentry settings |
+
+Only Supabase's browser URL and anonymous key, the public site URL, and browser observability values should use `NEXT_PUBLIC_`. Connector, model, service-role, provider, worker, signing, and workflow database secrets are server-only.
+
+## Durable workflow checkpoints
+
+Local development uses the local Supabase Postgres database. Hosted environments must provide a direct server-only Postgres connection in `MANDALA_WORKFLOW_DATABASE_URL` and initialize the LangGraph checkpoint schema:
+
+```bash
+pnpm --filter web workflow:checkpoint:setup
+```
+
+Do not pass this connection string to the browser, terminal, model, tools, traces, or work-item records.
+
+## Scheduled workers
+
+Production scheduling should invoke the secret-protected internal routes for connector sync, Context Engine indexing, email/account cleanup, and related maintenance.
+
+A healthy worker pipeline has more than a successful HTTP response. Verify:
+
+- a recent worker heartbeat;
+- claimed and completed leases;
+- no growing stuck or retry queue;
+- provider authentication and rate-limit state;
+- source and catalog freshness;
+- reconciliation outcomes; and
+- downstream evidence or provenance on a real bounded run.
+
+## Connector readiness
+
+Treat these as separate release checks:
+
+1. credentials are configured server-side;
+2. the workspace installation is enabled;
+3. required capabilities are granted;
+4. provider health is passing;
+5. sync is continuous, not a one-time snapshot;
+6. required datasets are fresh and complete;
+7. the workspace catalog matches the current schemas; and
+8. a Sandbox or controlled run uses the expected sources.
+
+Provider-console success or a searchable imported row does not prove the complete path.
+
+## Context Engine readiness
+
+Provider sync, indexing, retrieval, and actual use in a work item are separate states. Verify the ledger and processing queue, then inspect the work item's `operationalContext` and citations.
+
+If the provider is unavailable or policy-ineligible, Mandala should record a bounded fallback reason. Do not remove freshness or policy gates to make a demo pass.
+
+## Observability
+
+Sentry loads through the Next.js server and client instrumentation files. LangSmith tracing is optional and should keep inputs and outputs hidden for production unless a reviewed policy says otherwise.
+
+Operational records also exist inside Mandala: workflow audit events, lifecycle events, connector health, context indexing events, execution receipts, monitoring events, feedback, provider usage, and email delivery events.
+
+## Release verification
+
+Choose checks closest to the changed surface:
+
+```bash
+pnpm --filter web typecheck
+pnpm --filter web lint
+pnpm --filter web test
+
+pnpm --filter @workspace/cli typecheck
+pnpm --filter @workspace/cli lint
+pnpm --filter @workspace/cli test
+
+supabase test db
+supabase db lint --local --level warning
+pnpm test:e2e
+pnpm --filter web build
+```
+
+For connector, Context Engine, Sandbox, or approval changes, also run the focused local end-to-end suites and a bounded real journey:
 
 ```text
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY
-NEXT_PUBLIC_SITE_URL
-PLAYWRIGHT_BASE_URL
-CI
+connector sync -> catalog -> Sandbox or agent run -> persisted recommendation -> Inbox detail -> decision -> mock execution -> receipt
 ```
 
-`NEXT_PUBLIC_SITE_URL` matters for auth emails. If it is absent, the browser auth client falls back to the current window origin when constructing `/callback`.
-
-`SUPABASE_SERVICE_ROLE_KEY` is required only for admin-only server flows and should never be exposed to client code.
-
-## Supabase
-
-Local development expects Supabase to be running through the Supabase CLI:
-
-```bash
-supabase start
-pnpm db:migrate
-pnpm db:types
-```
-
-RLS is the main data boundary. Every product table policy scopes access to the current user. Storage policies scope access to the first path segment in private buckets.
-
-## Sentry
-
-`apps/web/next.config.mjs` wraps the Next.js config with `withSentryConfig()` outside CI.
-
-In CI, the Sentry webpack wrapper is skipped to avoid long source-map generation during Playwright setup. Runtime instrumentation still loads through:
-
-- `apps/web/instrumentation.ts`
-- `apps/web/instrumentation-client.ts`
-
-## Playwright
-
-Playwright config lives in `apps/web/playwright.config.ts`.
-
-The test server behavior is:
-
-- local default: `pnpm dev`
-- CI or `PLAYWRIGHT_PROD=1`: `pnpm --filter web build && pnpm --filter web start`
-
-The config increases `NODE_OPTIONS` to `--max-old-space-size=4096` because Plate.js, emoji-mart, and Sentry instrumentation can make production builds memory-heavy.
-
-## Lighthouse CI
-
-`.lighthouserc.json` defines Lighthouse CI assertions:
-
-- performance warns below `0.85`
-- accessibility errors below `0.9`
-- best practices warn below `0.9`
-
-The current configured URLs are `/sign-in` and `/sign-up`. The live auth route is `/login`, so this config should be updated before treating Lighthouse CI as authoritative.
-
-## Mintlify docs
-
-Mintlify configuration lives in `docs/docs.json`, with MDX pages under `docs/`.
-
-Useful commands:
-
-```bash
-cd docs
-npx mintlify@latest validate
-npx mintlify@latest broken-links
-npx mintlify@latest dev
-```
-
-On this machine, `pnpm dlx mintlify@latest` failed before reaching CLI help under Node 24, while `npx mintlify@latest --help` worked.
+A green local suite does not waive missing production environment variables, unapplied migrations, unhealthy providers, or stale data.

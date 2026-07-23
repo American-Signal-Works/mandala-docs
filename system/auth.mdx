@@ -1,89 +1,84 @@
 ---
-title: "Authentication"
-description: "Current Supabase auth flow, middleware behavior, and session handling."
+title: "Authentication and roles"
+description: "Web auth, hosted CLI authorization, secure session storage, workspace roles, and invitations."
+sidebarTitle: "Authentication and roles"
+icon: "shield-user"
+keywords: ["Supabase Auth", "CLI login", "workspace roles", "invitations"]
 ---
 
-The app uses Supabase Auth with SSR cookie support from `@supabase/ssr`.
+Mandala uses Supabase Auth for user identity and adds workspace membership, hosted CLI authorization, invitation handoff, and role-checked permissions around it.
 
-## Login UI
+## Web sign-in
 
-The active login route is `/login`.
+The web app supports email-link authentication through `/login`, `/sign-up`, and the server callback at `/callback`.
 
-`apps/web/components/auth/LoginAuthFlow.tsx` implements a three-step flow:
+Auth email delivery is routed through the Mandala email foundation so delivery attempts, suppressions, provider results, and callback state can be audited without exposing tokens in logs. `NEXT_PUBLIC_SITE_URL` must match the public deployment so email links return to the correct origin.
 
-1. Email entry.
-2. Link-sent state with resend support.
-3. Success state after callback completion.
+Middleware refreshes the Supabase session and protects authenticated product routes. Server Components and route handlers use cookie-backed Supabase clients; privileged maintenance work uses a server-only service-role client.
 
-Email validation and normalization live in `apps/web/lib/auth/validation.ts`.
+## Hosted terminal sign-in
 
-Google and Microsoft buttons are visible but disabled in the current UI.
+Run:
 
-## Magic link request
-
-The browser calls `requestEmailMagicLink()` from `apps/web/lib/auth/client.ts`.
-
-That helper calls:
-
-```ts
-createClient().auth.signInWithOtp({
-  email,
-  options: {
-    emailRedirectTo: getEmailRedirectTo(),
-  },
-})
+```bash
+mandala auth login
 ```
 
-`getEmailRedirectTo()` uses `NEXT_PUBLIC_SITE_URL` when set, otherwise it falls back to `window.location.origin`, and appends `/callback`.
+The terminal creates a short-lived device authorization, opens `/cli/authorize` in the browser, and waits. The signed-in user reviews the request and chooses an authorized workspace. The terminal then exchanges the approved request for a revocable CLI session.
 
-## Callback completion
+The protocol includes:
 
-`/callback` is implemented by `apps/web/app/(auth)/callback/page.tsx`.
+- bootstrap and inspection of a bounded authorization request;
+- explicit browser approval or denial;
+- one-time token exchange;
+- workspace-bound session credentials;
+- refresh and remote revocation;
+- expiration and replay protection; and
+- audit records for attempts and decisions.
 
-The callback page supports multiple Supabase callback shapes:
+The CLI never receives a Supabase service-role key, connector credential, model key, workflow database URL, or signing secret.
 
-- `code` query parameter, completed with `exchangeCodeForSession()`
-- `token_hash` query parameter, completed with `verifyOtp()`
-- `access_token` and `refresh_token` hash parameters, completed with `setSession()`
-- an already-present session from `getSession()`
+## Local engineering sign-in
 
-On success, the route replaces the URL with:
+For the local stack, use:
 
-```text
-/login?auth=success
+```bash
+mandala auth login --local --email seed@example.com
 ```
 
-On failure, it replaces the URL with:
+The magic link appears in local Inbucket. This path exists for development and is separate from the hosted browser-authorization flow.
 
-```text
-/login?error=callback_failed
-```
+## Local session storage
 
-## Middleware
+Saved CLI state follows each operating system's conventions:
 
-`apps/web/middleware.ts` refreshes the Supabase session and owns route-level redirects.
+- macOS: Application Support
+- Linux: XDG config directory
+- Windows: `%APPDATA%\Mandala`
 
-Protected routes are:
+On Windows, session tokens are protected with the current account's Data Protection API. Signing out revokes the hosted session when possible and clears the local session and selected workspace.
 
-- `/`
-- `/p/*`
-- `/c/*`
-- `/settings*`
+## Workspace roles
 
-Unauthenticated users on protected routes are redirected to `/login`.
+| Role | Typical access |
+| --- | --- |
+| Owner | All workspace, policy, membership, workflow, and approval permissions |
+| Admin | Same platform permission set as owner; some ownership transitions remain separately guarded |
+| Approver | Read, run, approve, edit, reject, request rework, issue execution capability, and execute mock actions |
+| Member | Read workspace context and run workflows |
+| Viewer | Read-only workspace and workflow access |
+| Agent | No inherited human-role permissions |
 
-Authenticated users visiting `/login` are redirected to `/`, except when the URL is `/login?auth=success`.
+Authorization is checked for the exact operation. A user being able to view an item does not imply they can approve or execute it.
 
-If `/login?auth=success` is reached without a user session, middleware removes `auth=success` and redirects back to `/login`.
+## Invitations and membership
 
-## Server clients
+Invitations have separate inspect, accept, resend, and revoke routes. Token material is protected by `INVITATION_TOKEN_SECRET`, and the browser handoff preserves the intended workspace across authentication.
 
-Use the right Supabase client for the runtime:
+Membership transitions are versioned and auditable. Owners and admins manage membership through role-checked database functions; clients cannot update role rows directly.
 
-| Runtime | File | Purpose |
-| --- | --- | --- |
-| Server Components and Server Actions | `apps/web/lib/supabase/server.ts` | Authenticated Supabase client backed by Next cookies |
-| Browser components | `apps/web/lib/supabase/browser.ts` | Browser Supabase client for auth interactions |
-| Admin-only server actions | `apps/web/lib/supabase/admin.ts` | Service-role client that bypasses RLS |
+## Server clients and secrets
 
-The admin client must stay server-only.
+Use the cookie-backed server client for normal authenticated work, the browser client only for browser auth interactions, and the service-role client only inside server-only modules.
+
+Secrets in `.env.example` that control auth, invitations, email payloads, session replacement, workers, and account deletion must never use a `NEXT_PUBLIC_` prefix.

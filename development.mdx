@@ -1,71 +1,123 @@
 ---
 title: "Development"
-description: "Local setup, commands, and contribution workflow for the product."
+description: "Run the stack, build the terminal, work with migrations, test agents, and preserve safety boundaries."
+sidebarTitle: "Development"
+icon: "code"
+keywords: ["local development", "testing", "migrations", "agent development"]
 ---
 
 ## Prerequisites
 
-- Node.js 20 or newer
-- pnpm 10.x, matching the `packageManager` field in `package.json`
+- Node.js 22 or newer
+- pnpm 10.33.x
 - Docker
 - Supabase CLI
-- A configured `apps/web/.env.local`
 
-## Install and run
+## Start the repository
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 supabase start
-pnpm db:types
+supabase db reset
 cp .env.example apps/web/.env.local
+pnpm seed
+pnpm db:types
 pnpm dev
 ```
 
-After editing `apps/web/.env.local`, visit `http://localhost:3000`.
+On Windows PowerShell, use `Copy-Item .env.example apps/web/.env.local`.
 
-## Common commands
+The web app runs at [localhost:3000](http://localhost:3000). Local auth email appears in Inbucket at [127.0.0.1:54324](http://127.0.0.1:54324).
+
+The seed creates a development user, company, synthetic connector, capability grants, policy, catalog data, and test workflow state. Use `pnpm seed:reset` when you need to replace seeded state deliberately.
+
+## Terminal client
 
 ```bash
-pnpm dev
+pnpm cli:link
+mandala auth login --local --email seed@example.com
+mandala
+```
+
+On macOS and Linux, the linker uses `~/.local/bin` by default. On Windows it creates `%LOCALAPPDATA%\Mandala\bin\mandala.cmd`; add that directory to `PATH` or set `MANDALA_BIN_DIR`.
+
+## Common checks
+
+```bash
 pnpm build
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:e2e
-pnpm db:migrate
-pnpm db:types
+
+pnpm --filter web test
+pnpm --filter @workspace/cli test
+supabase test db
+supabase db lint --local --level warning
 ```
 
-`pnpm test:e2e` runs Playwright through `apps/web/playwright.config.ts`. In CI or when `PLAYWRIGHT_PROD=1`, Playwright builds the app and starts a production Next.js server before running tests.
+Prefer the smallest relevant suite while iterating, then run the broader release-owned checks before handoff.
 
-## Supabase workflow
+## Database workflow
 
-Schema changes live in `supabase/migrations`. After applying migrations locally, regenerate the typed Supabase client:
+Schema changes are append-only SQL migrations under `supabase/migrations`.
 
 ```bash
+supabase db reset
 pnpm db:types
+supabase test db
 ```
 
-Generated types are written to `apps/web/lib/supabase/types.ts`.
+Generated Supabase types are written to `apps/web/lib/supabase/types.ts`. Never hand-edit that file.
 
-## Documentation workflow
+Security-sensitive changes should add database tests for tenant isolation, anonymous access, role boundaries, expected-version conflicts, and replay behavior.
 
-Mintlify docs live in `docs/`. Use the Mintlify CLI from that directory:
+## Agent development
+
+1. Start from an existing example in `skills/`.
+2. Keep the frontmatter contract declarative and versioned.
+3. Validate before installation.
+4. Test with synthetic fixtures.
+5. Test in real-data Sandbox and review generated mappings.
+6. Inspect the recommendation, evidence, warnings, draft, and history.
+7. Activate only after readiness passes.
+
+Do not add a workflow-name branch, special API route, or extra privilege just to support one new agent. Extend the generic skill schema, capability catalog, compiler, or runtime only when the new concept truly applies across workflows.
+
+## Safety-sensitive code
+
+When changing connectors, Context Engine, decisions, or execution:
+
+- preserve workspace scoping end to end;
+- validate at trust boundaries;
+- keep connector and model credentials server-only;
+- use expected versions for mutable configuration and review state;
+- make retries idempotent;
+- store evidence and audit history before side effects;
+- retain fail-closed behavior for missing grants, stale data, schema drift, and unhealthy providers; and
+- test direct API bypass attempts, not only the guided CLI.
+
+## Documentation
+
+Mintlify source lives under `docs/` in the repository.
 
 ```bash
 cd docs
 npx mintlify@latest validate
+npx mintlify@latest broken-links
 npx mintlify@latest dev
 ```
 
-If `pnpm dlx mintlify@latest` fails locally under Node 24, use `npx mintlify@latest`. That path was verified to expose `dev`, `validate`, `broken-links`, `status`, and related commands on this machine.
+Update documentation in the same change when commands, environment variables, route contracts, lifecycle states, or safety boundaries change.
 
-## Codex workflow
+## Codex and design workflow
 
-The source repository keeps repo-owned Codex workflow instructions in `AGENTS.md` and `.codex/skills/orchestrator/SKILL.md`. For Figma-to-implementation work, use the Orchestrator skill and keep workflow artifacts under:
+Repository instructions live in `AGENTS.md` and `CLAUDE.md`. Figma-to-implementation and release-ready feature work uses the repo-owned Orchestrator skill.
+
+Review artifacts belong under:
 
 ```text
 docs/codex/runs/<yyyy-mm-dd-feature-slug>/
 ```
 
-The design contract is an approval gate. Implementation should start only after the user approves the contract.
+The design contract is an approval gate. Before merge or release, remove temporary contracts, plans, QA notes, and fix lists unless they are intentionally durable documentation.

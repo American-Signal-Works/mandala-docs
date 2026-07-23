@@ -1,71 +1,92 @@
 ---
 title: "Architecture"
-description: "How the current app is assembled at runtime."
+description: "How the CLI, control plane, compiler, runtime, connectors, Context Engine, and workers fit together."
+sidebarTitle: "Architecture"
+icon: "sitemap"
+keywords: ["Mandala architecture", "control plane", "LangGraph", "Supabase"]
 ---
 
-The app is a Turborepo with one application package, `apps/web`, and shared internal packages under `packages/`.
+Mandala is a Turborepo with a Next.js control plane, a cross-platform terminal client, shared TypeScript contracts, Supabase persistence, and background workers for connectors, context, signals, monitoring, email, and account cleanup.
 
-```text
-Browser
-  -> Next.js App Router on Vercel or local dev
-    -> Server Components for reads
-    -> Server Actions for writes
-    -> Route handlers for collection and aggregate APIs
-      -> Supabase Auth, Postgres, Storage, and RLS
+```mermaid
+flowchart TB
+  CLI[Mandala terminal] --> API[Next.js control-plane APIs]
+  WEB[Web app and browser authorization] --> API
+  API --> AUTH[Supabase Auth and workspace roles]
+  API --> CP[Shared control-plane contracts]
+  API --> COMP[Skill compiler and lifecycle]
+  COMP --> RUN[Durable LangGraph runtime]
+  RUN --> DATA[Capability-bound workspace data]
+  DATA --> CONN[Connectors and external records]
+  RUN --> CTX[Context Engine]
+  RUN --> REVIEW[Work items, evidence, drafts, approvals]
+  REVIEW --> EXEC[Controlled executor registry]
+  API --> DB[(Supabase Postgres and Storage)]
+  RUN --> DB
+  CONN --> DB
+  CTX --> DB
+  EXEC --> DB
 ```
 
-## Application package
+## Repository map
 
-`apps/web` owns the product runtime:
-
-- `app/(auth)` contains login and callback routes.
-- `app/(app)` contains authenticated product routes.
-- `app/api` exposes JSON endpoints used by collection-aware blocks and UI.
-- `actions` contains Server Actions for writes.
-- `components` contains shell, sidebar, settings, collection, auth, and editor UI.
-- `lib` contains domain logic for auth, collections, connections, Supabase clients, templates, and upload helpers.
-
-## Route structure
-
-| Route | Purpose |
+| Area | Responsibility |
 | --- | --- |
-| `/login` | Email magic-link login UI and post-callback success state |
-| `/callback` | Client-side Supabase callback completion |
-| `/` | Authenticated empty/dashboard landing route |
-| `/p/[pageId]` | Dashboard page editor |
-| `/c/[pageId]` | Collection page list view |
-| `/settings/account` | Password, sign out, delete account |
-| `/settings/profile` | Display name, avatar, timezone |
-| `/settings/appearance` | Theme mode and accent |
-| `/settings/connections` | Connection import surface |
+| `apps/cli` | Interactive TUI, scripted commands, hosted and local auth, secure local session storage |
+| `apps/web/app/api/mandala` | Authenticated workspace, agent, Sandbox, control, review, execution, memory, and usage APIs |
+| `apps/web/lib/mandala` | Compiler, runtime, connectors, Context Engine, policies, lifecycle, actions, and services |
+| `packages/control-plane` | Shared request, response, authorization, context, Sandbox, and workspace-data contracts |
+| `skills` | Installable example `SKILL.md` definitions |
+| `supabase/migrations` | Tenant, workflow, connector, capability, context, audit, and account schemas |
+| `supabase/tests` | Authorization and database behavior tests |
+| `seed` | Local workspace, connector, policy, fixture, and catalog setup |
 
-## Data access pattern
+## Request boundary
 
-The preferred app pattern is:
+The CLI and web app do not talk directly to provider credentials or privileged database tables. They call authenticated Next.js route handlers.
 
-- Server Components read with `createClient()` from `apps/web/lib/supabase/server.ts`.
-- Server Actions write with the same server Supabase client.
-- Browser-only auth calls use `apps/web/lib/supabase/browser.ts`.
-- Admin-only actions use `apps/web/lib/supabase/admin.ts`, which imports `server-only` and requires `SUPABASE_SERVICE_ROLE_KEY`.
+Each route:
 
-Normal app traffic does not use API routes for CRUD writes. Existing route handlers are read-oriented support endpoints for collections and aggregate reads.
+1. validates the session or managed CLI credential;
+2. checks that the selected workspace is bound to that session;
+3. validates the body with shared Zod schemas;
+4. authorizes the exact company permission;
+5. calls a domain service or database RPC; and
+6. returns a bounded response envelope.
 
-## Product primitives
+The terminal renders safe projections rather than arbitrary raw database rows.
 
-The product has a generic core:
+## Agent boundary
 
-- Pages are top-level sidebar entities.
-- A page is either a dashboard or a collection page.
-- Dashboards store a Plate document in `pages.document`.
-- Collection pages point at a `collections` row through `pages.collection_id`.
-- Blocks query collections rather than domain-specific tables.
-- Connections produce managed collections through the same collection primitive.
+The compiler turns a declarative skill into a manifest with exact capability bindings and a fixed graph. Activated versions and mapping snapshots are immutable.
 
-The current vertical is trading. Trading-specific code is isolated to the IBKR connection, parser, round-trip aggregator, and trading templates.
+At runtime, allowed tools come from the compiled graph node. Model judgment is limited to the bounded evidence and approved fields supplied to that node. Deterministic rules calculate protected values and decide whether work is ready, warned, suppressed, or blocked.
 
-## Current caveats
+LangGraph checkpoints preserve progress through retries and human approval pauses. Hosted deployments use `MANDALA_WORKFLOW_DATABASE_URL`; local development reuses the local Supabase Postgres database.
 
-- Collection filtering and sorting are applied in JavaScript after loading rows through the collection runtime.
-- Import jobs run synchronously in a Server Action.
-- Multi-tenant database columns support `owner_type = 'workspace'`, but the current RLS policies only permit user ownership.
-- The active auth UI is email magic link; social buttons are present but disabled.
+## Data boundary
+
+Connectors normalize provider records into tenant-scoped external records. A workspace data catalog describes datasets and schema fingerprints. Skills bind business capabilities to catalog datasets through versioned mapping snapshots.
+
+The Context Engine maintains a separate derived index of policy-approved operational memory. It never replaces the authoritative connector snapshot or the evidence stored with a work item.
+
+## Execution boundary
+
+Approval creates or releases a short-lived execution capability for the exact draft and review version. Execution rechecks lifecycle, policy, binding, connector health, actor role, approval, and idempotency before dispatch.
+
+Adapters cannot receive connector credentials through the model or client. The registry validates input and output, applies timeout and retry policy, stores hashed receipts, and records whether an effect was simulated, observed, committed, unknown, or requires reconciliation.
+
+The repository's registered state-changing adapter currently supports mock execution only.
+
+## Background work
+
+Internal worker routes process:
+
+- connector synchronization;
+- Context Engine indexing and reconciliation;
+- changed-record signal dispatch;
+- follow-up monitoring;
+- email delivery and payload resolution; and
+- account-deletion cleanup.
+
+Workers use secret-protected internal routes, database leases, bounded batches, idempotency, and durable event records. A browser request is not required to keep these pipelines moving.

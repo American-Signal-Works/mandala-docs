@@ -1,125 +1,112 @@
 ---
-title: "Data Model"
-description: "Current Supabase tables, ownership model, and RLS boundaries."
+title: "Data model and security boundaries"
+description: "Workspace ownership, major database domains, versioning, RLS, and private workflow records."
+sidebarTitle: "Data and security"
+icon: "database"
+keywords: ["Supabase schema", "RLS", "workflow data", "tenant isolation"]
 ---
 
-The database schema is defined by SQL migrations in `supabase/migrations`.
+Mandala stores durable product state in Supabase Postgres. The schema is migration-owned, tenant-scoped, and designed so that a run can be reconstructed from the versions, evidence, decisions, and receipts that existed at the time.
 
-## Ownership model
+## Tenant model
 
-Most product tables use:
+`companies` are the workspace boundary. `company_memberships` and related event tables bind users to one of these roles:
 
-```sql
-owner_type text
-owner_id uuid
-```
+- `owner`
+- `admin`
+- `approver`
+- `member`
+- `viewer`
+- `agent`
 
-Current policies require:
+Most Mandala records carry `company_id`. Row-Level Security and role-checked database functions enforce tenant isolation. Managed CLI credentials are additionally bound to an authorized user, company, and session.
 
-```sql
-owner_type = 'user' AND owner_id = auth.uid()
-```
+The original `pages`, `collections`, `collection_fields`, `collection_rows`, and `collection_views` tables remain for the web workspace, but agent workflows use the company-scoped control-plane model below.
 
-The schema allows `owner_type = 'workspace'` for future team ownership, but workspace ownership is not active in the current RLS policies.
+## Core domains
 
-`profiles` is account-scoped and uses `user_id` directly because it belongs to an auth user rather than a workspace.
+### Identity and policy
 
-## Core tables
-
-| Table | Purpose |
+| Tables | Purpose |
 | --- | --- |
-| `profiles` | Display name, avatar path, timezone, theme mode, and accent |
-| `pages` | Sidebar entities and dashboard documents |
-| `collections` | Collection metadata and connection ownership |
-| `collection_fields` | Typed field definitions for each collection |
-| `collection_rows` | JSONB row data keyed by field id |
-| `collection_views` | Saved list-view config |
-| `connection_imports` | Import audit records |
-| `storage.objects` | Backing storage for attachments and avatars |
+| `companies`, `company_memberships` | Workspace identity and user roles |
+| `company_membership_events`, `company_principals` | Membership history and non-human principals |
+| `company_approval_policies`, `company_capability_policies` | Approval and capability rules |
+| `company_policy_decisions` | Auditable policy outcomes |
+| `company_invitations`, token and event tables | Invite, inspect, accept, resend, and revoke flows |
 
-## Pages
+### Connectors and capabilities
 
-`pages.page_type` is constrained to `dashboard` or `collection`.
+| Tables | Purpose |
+| --- | --- |
+| `connector_definitions`, `connector_definition_versions` | Stable connector identity and immutable versions |
+| `capability_definitions`, `capability_definition_versions` | Versioned read, propose, and execute contracts |
+| `connector_capability_offerings` | Capabilities supplied by a connector version |
+| `company_connector_installations` | Workspace installations and configuration |
+| `company_connector_capability_grants` | Workspace grants |
+| `company_connector_health` | Health, freshness, and compatibility |
+| `external_sources`, `external_records`, `external_record_links` | Normalized provider snapshots and relations |
+| `workspace_data_catalogs` and mapping tables | Dataset profiles and versioned skill-to-data mappings |
 
-Dashboard pages have:
+### Agents and lifecycle
 
-```text
-document != null
-collection_id = null
+| Tables | Purpose |
+| --- | --- |
+| `agent_workflows` | Installed agent identity and source |
+| `workflow_binding_snapshots`, `workflow_capability_bindings` | Immutable compiled capability bindings |
+| `workflow_activations`, `workflow_activation_events` | Active version history |
+| `agent_runtime_states`, `agent_lifecycle_events` | Draft, ready, active, paused, and disabled state |
+| `agent_tool_definitions`, `agent_action_definitions` | Registered tools and controlled action contracts |
+| `agent_signal_*` tables | Changed-record triggers and dispatch history |
+
+### Runs, review, and execution
+
+| Tables | Purpose |
+| --- | --- |
+| `workflow_runs`, `workflow_events` | Durable run identity and event stream |
+| `workflow_items` | Inbox records |
+| `workflow_context_packets` | Captured sources, facts, freshness, warnings, and Context Engine provenance |
+| `workflow_recommendation_runs` | Recommendation and confidence output |
+| `workflow_evidence_snapshots` | Source references, assumptions, and evidence |
+| `workflow_action_drafts` | Proposed payload and edit policy |
+| `workflow_decisions` and outcome tables | Human decisions and outcomes |
+| `workflow_execution_tokens` | Short-lived authorization for an exact approved draft |
+| `workflow_action_attempts`, `agent_execution_receipts` | Idempotent execution and provider outcomes |
+| `workflow_audit_events` | User, agent, and system history |
+
+Sensitive decision receipts, queue snapshots, parser leases, and compiled-persistence receipts live in the `workflow_private` schema rather than the public API surface.
+
+### Context, memory, and operations
+
+Context indexing uses workspace settings, versioned policy, outbox, job, ledger, event, audit, operation-control, and tombstone tables. These separate the source record from the derived external index and support retry, cleanup, and reconciliation.
+
+Additional tables cover governed memory candidates, feedback, follow-ups, escalations, monitoring events, evaluations, promotion checkpoints, provider usage, email delivery, and account deletion.
+
+## Version and hash strategy
+
+Mandala avoids mutable meaning by persisting:
+
+- skill source and compiler digests;
+- connector, capability, schema, policy, mapping, and lifecycle versions;
+- expected versions on decisions and executions;
+- context and evidence snapshots;
+- idempotency keys; and
+- request and response hashes on execution receipts.
+
+A stale client or changed catalog receives a conflict instead of silently applying an old decision to new data.
+
+## Database boundaries
+
+RLS is necessary but not the only boundary. Security-sensitive transitions use role-checked SQL functions, compare-and-set versions, or RPCs that return safe projections. Anonymous callers cannot read workflow detail through the underlying tables.
+
+Schema changes belong in `supabase/migrations`. After local migrations, regenerate the typed client:
+
+```bash
+pnpm db:types
 ```
 
-Collection pages have:
+Database authorization and behavior tests live in `supabase/tests` and run with:
 
-```text
-document = null
-collection_id != null
+```bash
+supabase test db
 ```
-
-`pages.deleted_at` is a soft-delete marker. Normal list queries filter it out.
-
-`pages.updated_at` is maintained by the `touch_updated_at()` trigger and is used for optimistic concurrency when saving dashboard documents.
-
-## Collections
-
-`collections` contains both user-created collections and system collections created by connections.
-
-Important columns:
-
-- `is_system`: marks connection-managed collections.
-- `managed_by_connection`: stores the connection id, such as `ibkr-activity-statement`.
-- `deleted_at`: soft-delete marker.
-
-## Fields and rows
-
-`collection_fields` defines user-facing field metadata. Supported field types are:
-
-- `text`
-- `number`
-- `currency`
-- `date`
-- `datetime`
-- `select`
-- `multi_select`
-- `checkbox`
-
-Rows are stored in `collection_rows.data` as JSONB:
-
-```json
-{
-  "<field-id>": "value"
-}
-```
-
-Currency values use an object:
-
-```json
-{
-  "amount": 123.45,
-  "currency_code": "USD"
-}
-```
-
-Connection-imported rows set `source = connection:<id>` and a stable `source_external_id`.
-
-## Deduplication
-
-`collection_rows_dedup_idx` is a full unique index over:
-
-```text
-owner_type, owner_id, collection_id, source_external_id
-```
-
-This supports Supabase/PostgREST `.upsert({ onConflict })` during imports. User-created rows can still have `source_external_id = null`; PostgreSQL unique indexes allow multiple null values.
-
-## Storage buckets
-
-The migrations create private `attachments` and `avatars` buckets. Storage policies allow users to read, insert, and delete only paths whose first path segment is their `auth.uid()`.
-
-## Source files
-
-- `supabase/migrations/20260428000001_profiles.sql`
-- `supabase/migrations/20260429000001_pages.sql`
-- `supabase/migrations/20260429000002_collections.sql`
-- `supabase/migrations/20260430000002_connection_imports.sql`
-- `supabase/migrations/20260430000003_fix_collection_rows_dedup_idx.sql`
-- `supabase/migrations/20260430000004_avatars_bucket.sql`

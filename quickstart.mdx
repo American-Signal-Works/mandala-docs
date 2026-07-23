@@ -1,0 +1,80 @@
+---
+title: "Quickstart"
+sidebarTitle: "Quickstart"
+description: "Run Mandala locally, sign in, test an agent, and review the resulting work."
+icon: "play"
+keywords: ["Mandala quickstart", "local setup", "CLI", "Sandbox"]
+---
+
+Mandala is currently easiest to explore from the repository with the local web app, Supabase, and terminal client running together.
+
+## 1. Start the local stack
+
+You need Node.js 22 or newer, pnpm, Docker, and the Supabase CLI.
+
+```bash
+pnpm install --frozen-lockfile
+supabase start
+supabase db reset
+cp .env.example apps/web/.env.local
+pnpm seed
+pnpm db:types
+pnpm dev
+```
+
+On Windows PowerShell, replace the `cp` command with:
+
+```powershell
+Copy-Item .env.example apps/web/.env.local
+```
+
+The seed command creates a development user, workspace, synthetic commerce connector, and test data. It prints the local sign-in address. Never reuse those credentials outside local development.
+
+## 2. Build the terminal client
+
+```bash
+pnpm cli:link
+mandala auth login --local --email seed@example.com
+```
+
+Open the newest message in the local inbox at [127.0.0.1:54324](http://127.0.0.1:54324), then follow the magic link.
+
+<Note>
+  On hosted Mandala, use `mandala auth login` without an email. The terminal opens a browser where you sign in and choose a workspace.
+</Note>
+
+## 3. Open Mandala
+
+```bash
+mandala
+```
+
+The interactive terminal is the primary working surface. Type `/` to browse available commands or `/help` to see commands that are valid in the current context.
+
+A useful first walkthrough is:
+
+1. Run `/workspace` and select the seeded workspace.
+2. Run `/agents` and open the procurement agent.
+3. Test it in Sandbox before activation.
+4. Run `/inbox` and open the generated recommendation.
+5. Inspect `/recommendation`, `/evidence`, `/draft`, and `/history`.
+6. Approve, edit, reject, resolve, or request rework from the review screen.
+7. Use `/execute` only after an item is approved. The included executor is mock-only.
+
+## 4. Check the environment
+
+```bash
+mandala status
+mandala auth status
+mandala context status
+mandala sandbox status
+```
+
+These commands show the selected workspace, authenticated user, Context Engine readiness, and Sandbox safety setting without changing anything.
+
+## Next steps
+
+- Learn how agent definitions work in [Agents](/guides/agents).
+- Understand the temporary write boundary in [Sandbox](/guides/sandbox).
+- Follow the review lifecycle in [Inbox and approvals](/guides/inbox-and-approvals).
+- See every scripted command in the [CLI reference](/reference/cli).

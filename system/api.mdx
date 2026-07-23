@@ -1,111 +1,87 @@
 ---
-title: "API Routes"
-description: "Current route handlers used by the app and editor blocks."
+title: "API reference"
+description: "Authenticated control-plane route groups, worker endpoints, response contracts, and extension rules."
+sidebarTitle: "API routes"
+icon: "brackets-curly"
+keywords: ["API", "route handlers", "control plane", "workers"]
 ---
 
-The app primarily uses Server Components for reads and Server Actions for writes. API route handlers exist for collection and aggregate reads that are convenient for client-side hooks and editor blocks.
+Mandala's Next.js route handlers form the shared control plane for the terminal and web clients. They are product APIs, not a public unauthenticated integration surface.
 
-All current API routes require an authenticated Supabase user. Unauthenticated requests return `401`.
+Most request and response schemas live in `packages/control-plane`. Routes reject unknown or malformed input, authenticate the user or managed CLI session, verify the selected workspace, authorize an exact permission, and return a bounded safe projection.
 
-## GET /api/collections
+## Response shape
 
-Implemented in `apps/web/app/api/collections/route.ts`.
+New control-plane routes use a versioned success or error envelope with metadata. Clients should branch on the stable error code, not parse human-readable messages.
 
-Returns visible collections for the current user and a compact field list for each collection.
+Mutating requests carry expected versions, reasons, confirmation state, or idempotency keys when the operation needs them. Version conflicts return a safe error instead of overwriting newer state.
 
-Response shape:
+## Route groups
 
-```json
-[
-  {
-    "id": "collection-id",
-    "name": "Trades",
-    "fields": [
-      {
-        "id": "field-id",
-        "name": "Net P&L",
-        "type": "currency",
-        "collection_id": "collection-id"
-      }
-    ]
-  }
-]
-```
+### Agents
 
-## GET /api/collections/:id/fields
+`/api/mandala/agents` covers validation, installation, listing, and per-agent lifecycle operations:
 
-Implemented in `apps/web/app/api/collections/[id]/fields/route.ts`.
+- activate and deactivate;
+- pause, resume, and disable;
+- test runs and manual runs; and
+- version history and rollback through the lifecycle service.
 
-Returns all fields for a collection owned by the current user, ordered by `sort_index`.
+### Work and approvals
 
-## GET /api/collections/:id/rows
+`/api/mandala/workflows` exposes:
 
-Implemented in `apps/web/app/api/collections/[id]/rows/route.ts`.
+- filtered, cursor-paginated work queues;
+- safe item detail and review projections;
+- item activity and read-only questions;
+- fixture runs;
+- approve, edit, reject, rework, and resolve decisions;
+- short-lived execution capabilities; and
+- controlled execution.
 
-Returns rows for a collection owned by the current user.
+Queue and review responses intentionally omit private receipts, raw credentials, and unbounded source payloads.
 
-Query parameters:
+### Sandbox and workspace data
 
-| Parameter | Default | Purpose |
-| --- | --- | --- |
-| `limit` | `100` | Maximum number of rows to return |
+`/api/mandala/sandbox/sessions` and `/api/mandala/sandbox/runs` create temporary real-data sessions and run skill definitions against cataloged workspace data.
 
-## GET /api/collections/:id/rows/:rowId
+Mappings, freshness, source coverage, and schema compatibility are checked before the run proceeds.
 
-Implemented in `apps/web/app/api/collections/[id]/rows/[rowId]/route.ts`.
+### Control and conversation
 
-Returns one row from a collection owned by the current user, or `null` if it does not exist.
+`/api/mandala/control` covers bounded intent parsing, request audit state, transitions, and contextual chat. Read-only questions can stream text; state changes still resolve to typed intents and use the guarded mutation routes.
 
-## POST /api/aggregate
+### Hosted CLI authorization
 
-Implemented in `apps/web/app/api/aggregate/route.ts`.
+`/api/mandala/cli` handles device-authorization bootstrap, inspection, browser decision, token exchange, session refresh, revocation, and workspace selection.
 
-Request body:
+### Workspace services
 
-```json
-{
-  "collectionId": "collection-id",
-  "metric": {
-    "kind": "sum",
-    "fieldId": "field-id"
-  },
-  "groupBy": ["field-id"]
-}
-```
+Company, membership, invitation, profile, usage, feedback, governed memory, Context Engine setting, monitoring, and logo routes live under `/api/mandala`.
 
-Supported metric kinds:
+## Internal worker routes
 
-- `count`
-- `sum`
-- `avg`
-- `min`
-- `max`
+These routes are for scheduled server-to-server work and require worker or cron secrets:
 
-Ungrouped response:
+| Route | Purpose |
+| --- | --- |
+| `/api/internal/mandala/connector-sync/run` | Sync enabled connector installations |
+| `/api/internal/mandala/context-index/run` | Process Context Engine outbox, jobs, and reconciliation |
+| `/api/internal/email/payload` | Resolve protected email payloads |
+| `/api/internal/account-deletion/cleanup` | Finish scheduled account deletion |
 
-```json
-{
-  "value": 123
-}
-```
+Worker routes accept bounded batches and rely on database leases and idempotency. Do not expose their secrets to the browser or CLI.
 
-Grouped response:
+## Legacy workspace APIs
 
-```json
-{
-  "groups": [
-    {
-      "key": {
-        "field-id": "AAPL"
-      },
-      "value": 123
-    }
-  ]
-}
-```
+The web workspace still uses collection read routes under `/api/collections` and the aggregate route at `/api/aggregate`. They support the original page and collection surfaces and are separate from the Mandala agent control plane.
 
-## Error behavior
+## Adding or changing a route
 
-The aggregate route validates request bodies with Zod. Invalid input returns `400`. Runtime aggregate failures return `500` with an error message.
-
-Collection read routes currently return empty arrays when no rows or fields are found.
+1. Define or update the Zod contract in `packages/control-plane` when the client shares it.
+2. Authenticate and bind the request to one workspace.
+3. Authorize the exact permission, not a generic signed-in check.
+4. Return the smallest safe response projection.
+5. Require expected versions and idempotency for state transitions where appropriate.
+6. Add route tests for success, malformed input, wrong tenant, insufficient role, stale version, and replay.
+7. Keep secrets, raw provider payloads, and private workflow tables out of response bodies and traces.
