@@ -41,6 +41,32 @@ Mutating requests carry expected versions, reasons, confirmation state, or idemp
 
 Queue and review responses intentionally omit private receipts, raw credentials, and unbounded source payloads.
 
+### Fixture validation results
+
+`POST /api/mandala/workflows/fixtures` runs one registered workflow fixture for an authorized workspace. The private, uncached response includes a bounded validation result:
+
+```json
+{
+  "status": "blocked",
+  "issues": [
+    {
+      "code": "source_data_stale",
+      "message": "Source data is stale.",
+      "kind": "reason"
+    }
+  ],
+  "reasons": ["Source data is stale."],
+  "warnings": [],
+  "suppressRecommendation": true
+}
+```
+
+Use `issues[].code` for automation, filtering, and routing. Codes are stable identifiers. The reader-facing `message` can change. `kind` is either `reason` or `warning`.
+
+The `reasons` and `warnings` arrays remain as compatibility projections for existing consumers. Historical message-only results remain readable and receive a safe `legacy_unclassified_reason` or `legacy_unclassified_warning` code when normalized.
+
+The same validation object is stored in the workflow event and its `event_validated` audit payload. The CLI fixture command renders only the bounded status, suppression state, and code/message issue rows. It does not render raw event, audit, source, or customer payloads.
+
 ### Sandbox and workspace data
 
 `/api/mandala/sandbox/sessions` and `/api/mandala/sandbox/runs` create temporary real-data sessions and run skill definitions against cataloged workspace data.
