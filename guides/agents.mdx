@@ -1,0 +1,84 @@
+---
+title: "Agents"
+sidebarTitle: "Agents"
+description: "Define, validate, test, activate, pause, and restore permissioned Mandala agents."
+icon: "bot"
+keywords: ["SKILL.md", "agent lifecycle", "capabilities", "activation"]
+---
+
+A Mandala agent is a versioned workflow definition, not an unrestricted chatbot. Its `SKILL.md` declares what data it may read, what rules must run, what records it can produce, when a person must approve work, and which controlled actions are available.
+
+## What is in a skill
+
+Every supported skill uses `api_version: mandala.ai/v1` and `kind: agent_workflow`. The main sections are:
+
+| Section | Purpose |
+| --- | --- |
+| `metadata` | Stable identity, version, name, and description |
+| `workflow` | Mode and supported triggers |
+| `capabilities` | Versioned read, propose, and execute permissions |
+| `rules` | Deterministic checks, formulas, warnings, blocks, and suppression |
+| `records` | Work item, recommendation, and draft projections |
+| `evidence` | Required sources, assumptions, and provenance |
+| `approvals` | Minimum role and acknowledgement requirements |
+| `actions` | Controlled actions bound to connector capabilities |
+| `tests` | Expected scenarios and outputs |
+| `guidance` | Bounded model judgment and output-quality instructions |
+
+See `skills/procurement-reorder/SKILL.md` and `skills/sales-spike-investigator/SKILL.md` in the repository for complete examples.
+
+## Compilation is a safety gate
+
+Mandala resolves every declared capability against the selected workspace. Validation fails when a required capability is missing, not granted, unhealthy, incompatible with the current connector schema, or not approved for model processing.
+
+A successful compilation produces an immutable manifest containing:
+
+- exact connector and capability versions;
+- allowed tools and model-visible fields;
+- a deterministic runtime graph;
+- rules, record projections, approvals, and actions; and
+- source and manifest digests for later explanation.
+
+Unknown fields and undeclared operations are rejected instead of being ignored.
+
+## Agent lifecycle
+
+Agents move through deliberate states:
+
+| State | Meaning |
+| --- | --- |
+| Draft | Installed, but not ready to start work |
+| Ready | Validation and Sandbox readiness checks passed |
+| Active | May start new runs |
+| Paused | Temporarily prevents new work and can be resumed after a fresh check |
+| Disabled | Requires a deliberate later change before it can run again |
+
+Each installed version is retained. Rollback restores an earlier version through the same validation and readiness boundaries.
+
+## Manage agents in the terminal
+
+Start with the guided manager:
+
+```text
+/agents
+```
+
+The manager can validate a file, install an inactive agent, run a Sandbox test, activate or deactivate it, pause or resume it, list versions, and restore an earlier version.
+
+Scripted workflows are also available through the `/agent-*` commands in the interactive client. A manual run against real cataloged workspace data uses:
+
+```bash
+mandala agents run <agent-id> --reason "Monthly reorder review" --confirm
+```
+
+The reason and explicit confirmation are required because the run reads real workspace data and persists a reviewable work item.
+
+<Warning>
+  Activation does not widen permissions. The runtime still checks the compiled binding, current workspace grant, connector health, schema compatibility, actor role, approval, and execution policy at the point of use.
+</Warning>
+
+## Runtime path
+
+A compiled run follows a fixed graph: resolve bindings, load permitted data, validate inputs, retrieve bounded context when enabled, perform model judgment, apply deterministic rules, project records, persist the review, pause for human approval, execute a controlled action if authorized, and audit the outcome.
+
+The model can select and explain a candidate. It cannot invent a tool, change a deterministic quantity rule, approve its own work, or read connector credentials.

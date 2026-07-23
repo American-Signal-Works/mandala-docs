@@ -1,0 +1,83 @@
+---
+title: "Inbox and approvals"
+sidebarTitle: "Inbox and approvals"
+description: "Review recommendations, evidence, drafts, decisions, and controlled execution outcomes."
+icon: "inbox"
+keywords: ["approval inbox", "work items", "evidence", "execution"]
+---
+
+The Inbox is where agent output becomes accountable human work. A recommendation is never just a chat response: it is stored with the source context, evidence, policy state, action draft, decision history, and execution outcome needed to review it later.
+
+## Open the Inbox
+
+```text
+/inbox
+```
+
+The view shows actionable items in `active`, `blocked`, or `approved` state. Use `/open <row-or-id>` to select an item.
+
+For scripted use:
+
+```bash
+mandala work list
+mandala work inspect <item-id>
+```
+
+## What to review
+
+A work item can contain:
+
+| Section | What it answers |
+| --- | --- |
+| Recommendation | What the agent proposes and how confident it is |
+| Evidence | Which source records, assumptions, and warnings support the recommendation |
+| Context | What was captured, how fresh it was, and whether Context Engine memory contributed |
+| Draft | The exact action payload that would cross the execution boundary |
+| History | Who or what changed the item, why, and how its state moved |
+| Outcome | Whether an approved action succeeded, failed, was replayed, or needs reconciliation |
+
+Use `/recommendation`, `/evidence`, `/draft`, `/history`, or `/detail` while an item is selected.
+
+You can also ask a read-only question about the selected item. In interactive mode, type the question directly or use:
+
+```bash
+mandala work ask <item-id> --question "Why was this created?"
+```
+
+Questions use the same safe review context and do not perform actions.
+
+## Decisions
+
+Available decisions depend on item state, policy, and your workspace role:
+
+- **Approve** accepts the current draft.
+- **Edit and approve** changes only paths allowed by the draft's edit policy and requires a reason.
+- **Reject** closes the proposal without execution and records a reason.
+- **Request rework** sends the item back for another agent pass with feedback.
+- **Resolve** closes work that does not need an action.
+
+Warnings may require explicit acknowledgement before approval. Stale review versions are rejected so a decision cannot silently apply to a draft that changed after you opened it.
+
+## Execute separately
+
+Approval and execution are separate steps. After approval, use:
+
+```text
+/execute
+```
+
+or:
+
+```bash
+mandala work execute <item-id>
+```
+
+Mandala rechecks the agent lifecycle, capability grant, connector health, policy version, binding version, actor role, approval, and idempotency key at execution time. Replaying the same authorized request returns the existing outcome instead of duplicating work.
+
+<Note>
+  The executors included in the current repository are mock-only. They produce auditable simulated receipts and do not commit a live vendor or ERP change.
+</Note>
+
+## Role boundaries
+
+Owners and admins can manage the workspace and make workflow decisions. Approvers can review, decide, issue execution capabilities, and run approved mock actions. Members can read and run workflows but cannot approve their own way around policy. Viewers are read-only. Agent principals receive no human-role permissions.

@@ -1,109 +1,87 @@
 ---
-title: "Collections"
-description: "How collection pages, fields, rows, views, and dashboard reads work."
+title: "Connectors and workspace data"
+description: "How connectors, capability grants, catalog mappings, sync, health, and freshness work."
+sidebarTitle: "Connectors and data"
+icon: "plug"
+keywords: ["connectors", "ShipHero", "Trello", "workspace data catalog"]
 ---
 
-Collections are the core generic data primitive in the product. User-created collections and connection-managed system collections share the same tables and runtime model.
+Connectors bring external business records into Mandala and expose narrowly defined capabilities to agents. A connector is not considered ready merely because rows were imported once: Mandala tracks its installation, grants, schema version, health, sync state, and data freshness separately.
 
-## Collection pages
+## Connector layers
 
-Creating a collection page through `createPage()` in `apps/web/actions/pages.ts` creates:
+| Layer | Purpose |
+| --- | --- |
+| Definition | Stable connector identity and non-secret configuration schema |
+| Version | Immutable capability and schema contract |
+| Installation | Workspace-specific connection record |
+| Capability offering | Read, propose, or execute operation supplied by that version |
+| Grant | Workspace authorization to use an offered capability |
+| Field classification | Which fields may be processed by the model |
+| Health | Authentication, availability, freshness, and schema compatibility |
+| External records | Normalized snapshots and links retained inside the workspace boundary |
 
-1. A row in `collections`.
-2. A `pages` row with `page_type = 'collection'`.
-3. A default `collection_views` row.
+An agent compiles only when its required capability can be resolved through all of these layers.
 
-The collection page route is `/c/[pageId]`.
+## Current connectors
 
-## Fields
+The repository contains:
 
-Fields are stored in `collection_fields` and manipulated by Server Actions in `apps/web/actions/collections.ts`.
+- **Synthetic commerce:** credential-free Mandala Bean Co. data and mock procurement capabilities for repeatable tests.
+- **ShipHero:** catalog, inventory, sales, purchase-order, and vendor data sync.
+- **Trello:** supporting business and open-order records used by workspace questions and procurement coverage.
 
-Supported field types are:
+Connector credentials are server-only. They must never appear in terminal output, model prompts, work items, traces, or Context Engine documents.
 
-- `text`
-- `number`
-- `currency`
-- `date`
-- `datetime`
-- `select`
-- `multi_select`
-- `checkbox`
+## Workspace data catalog
 
-`addField()` creates a field with a `sort_index` spaced by 1000. `renameField()` and `deleteField()` reject system fields.
+Imported records are profiled into a workspace data catalog. The catalog records dataset identity, shape, maintained counts, freshness, source coverage, and a schema fingerprint.
 
-Field defaults and value normalization live in:
+Capability mapping versions connect a skill's declared business fields to concrete catalog datasets. Activated agents bind to an immutable mapping version so a later connector change cannot silently reinterpret an existing workflow.
 
-- `apps/web/lib/collections/fields.ts`
-- `apps/web/lib/collections/types.ts`
+Before a real-data Sandbox or manual agent run, Mandala checks that the mapping still matches the current catalog. Catalog drift triggers a refresh or blocks the run instead of guessing.
 
-## Rows
+## Sync lifecycle
 
-Rows are stored in `collection_rows`.
+The connector worker:
 
-`addRow()` loads the collection fields, builds defaults for every field, overlays submitted values, and inserts the row with `source = 'user'`.
+1. claims an enabled installation;
+2. authenticates with the provider using server-side credentials;
+3. fetches a bounded page of records;
+4. normalizes records and source links;
+5. upserts snapshots with stable external ids;
+6. advances a signed pagination cursor;
+7. records success, error, and freshness state; and
+8. publishes changed-record events for downstream catalog and Context Engine work.
 
-`updateRowField()`:
+Periodic reconciliation is a backup. Provider changes should normally flow through connector sync and changed-record events.
 
-1. Loads the field type.
-2. Normalizes the incoming value.
-3. Reads the row JSON.
-4. Writes a new `data` object with the updated field id.
+## Health and freshness
 
-`deleteRow()` deletes the row.
+Mandala treats these as different questions:
 
-## Views
+- **Installed:** does the workspace have a connector record?
+- **Authenticated:** can the server use the configured credentials?
+- **Granted:** may this workspace use a particular capability?
+- **Healthy:** is the provider reachable and schema-compatible?
+- **Fresh:** are the required records recent enough for this workflow?
+- **Complete:** did every required source participate successfully?
 
-`collection_views.config` stores list-view state:
+A stale inventory snapshot, incomplete open-order coverage, or rate-limited provider can block a procurement recommendation even when older imported rows exist.
 
-```json
-{
-  "sort": [],
-  "filters": [],
-  "visibleFields": []
-}
-```
+<Warning>
+  Never describe an imported snapshot as a live connector unless authentication, continuous sync, worker health, and freshness have been verified.
+</Warning>
 
-The current database constrains `collection_views.type` to `list`.
+## Adding a connector
 
-## Runtime collection interface
+A production connector requires more than an API client:
 
-`apps/web/lib/collections/collection.ts` defines a `Collection` class used by route handlers and dashboard data hooks.
-
-The runtime supports:
-
-- loading collection metadata and fields
-- listing rows
-- counting rows
-- loading a single row
-- aggregating rows
-
-Filters and sorts are applied in JavaScript after rows are loaded from Supabase. This is acceptable for the current v1 scale, but larger datasets should push filtering, sorting, and pagination into Postgres.
-
-## Aggregates
-
-`Collection.aggregate()` supports:
-
-- `count`
-- `sum`
-- `avg`
-- `min`
-- `max`
-
-Aggregates can optionally group by field ids. Currency fields contribute their `amount` value.
-
-The aggregate API is exposed at `POST /api/aggregate`.
-
-## Dashboard blocks
-
-Generic dashboard blocks read from collections rather than domain-specific tables.
-
-Important files:
-
-- `apps/web/components/editor/blocks/CardBlockElement.tsx`
-- `apps/web/components/editor/blocks/ChartBlockElement.tsx`
-- `apps/web/components/editor/blocks/TableBlockElement.tsx`
-- `apps/web/components/editor/blocks/RowBlockElement.tsx`
-- `apps/web/components/editor/data-hooks/useMetric.ts`
-- `apps/web/components/editor/data-hooks/useChartData.ts`
-- `apps/web/components/editor/data-hooks/useRowDetail.ts`
+1. Define a stable connector and versioned capability catalog.
+2. Classify fields and explicitly approve model-visible paths.
+3. Normalize provider records into the external-record contract.
+4. Implement cursor-safe, retry-safe sync and health reporting.
+5. Add workspace installation, grant, and policy setup.
+6. Add catalog mapping and schema-drift tests.
+7. For writes, register a controlled executor with input/output validation, idempotency, timeout, retry, reconciliation, approval, and audit behavior.
+8. Prove tenant isolation and secret redaction before enabling the connector.
